@@ -1,0 +1,268 @@
+# Task 1. Create the lab resources
+
+export PROJECT_ID=$(gcloud config get-value project)
+export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+export REGION=<dynamic region>
+gcloud config set compute/region $REGION
+
+1. Run the following command to enable the APIs for GKE, Cloud Build, and Cloud Source Repositories:
+ 
+gcloud services enable container.googleapis.com \
+cloudbuild.googleapis.com \
+sourcerepo.googleapis.com
+
+2. Add the Kubernetes Developer role for the Cloud Build service account:
+ 
+export PROJECT_ID=$(gcloud config get-value project)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+--member=serviceAccount:$(gcloud projects describe $PROJECT_ID \
+--format="value(projectNumber)")@cloudbuild.gserviceaccount.com --role="roles/container.developer"
+
+3. Run the following to configure Git in Cloud Shell, replacing `<email>` with your generated lab email address and `<name>` with your name (e.g., student).
+
+git config --global user.email student-03-67774f8ce43c@qwiklabs.net
+git config --global user.name Student
+
+4. Create an Artifact Registry Docker repository named my-repository in the <dynamic region> region to store your container images:
+ 
+gcloud artifacts repositories create my-repository \
+--repository-format=docker \
+--location=<dynamic region>
+
+5. Create a GKE cluster named hello-cluster with the following configuration:
+
+gcloud container clusters create "hello-cluster" --zone "us-central1-a" --no-enable-basic-auth --cluster-version "1.27.3-gke.100" --release-channel "regular" --machine-type "e2-medium" --image-type "COS_CONTAINERD" --disk-type "pd-balanced" --disk-size "100" --metadata disable-legacy-endpoints=true --scopes "https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --max-pods-per-node "110" --num-nodes "3" --logging=SYSTEM,WORKLOAD --monitoring=SYSTEM --enable-ip-alias --default-max-pods-per-node "110" --enable-autoscaling --min-nodes "2" --max-nodes "6" --no-enable-master-authorized-networks --addons HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver --enable-managed-prometheus --enable-autoupgrade --enable-autorepair --max-surge-upgrade 1 --max-unavailable-upgrade 0 --node-locations "us-central1-a"
+
+
+6. Create the prod and dev  namespaces on your cluster.
+
+Navigate to your GKE clusters page, click on hello-cluster
+
+Click  Connect > Run in Cloud Shell and run the pre-populated gcloud container clusters get-credentials command.
+
+Run the following commands to create the namespaces:
+
+kubectl create namespace prod
+kubectl create namespace dev
+
+Task 2. Create a repository in Cloud Source Repositories
+
+In this task, you will create a repository sample-app in Cloud Source Repositories and will initialize it with some sample code.
+
+1. Create an empty repository named sample-app in Cloud Source Repositories.
+
+gcloud source repos create sample-app
+
+2. Clone the sample-app repository in Cloud Shell.
+
+gcloud source repos clone sample-app --project=$PROJECT_ID
+
+3. Use the following command to copy the sample code into your sample-app directory:
+
+cd ~
+gsutil cp -r gs://spls/gsp330/sample-app/* sample-app
+
+4. Run the following commands by replacing your region and zone:
+
+export REGION="<dynamic region>"
+export ZONE="<dynamic zone>"
+
+Run the below command without any change
+
+for file in sample-app/cloudbuild-dev.yaml sample-app/cloudbuild.yaml; do
+sed -i "s/<your-region>/${REGION}/g" "$file"
+sed -i "s/<your-zone>/${ZONE}/g" "$file"
+done
+
+Make your first commit with the sample code added to your sample-app directory, and push the changes to the master branch.
+
+cd sample-app
+git init
+git add . 
+git commit -m "first commit"
+git push -u origin master
+
+5. Create a branch named dev. Make your first commit with the sample code added to your sample-app directory, and push the changes to the dev branch.
+
+git checkout -b dev
+git push -u origin dev
+
+6. Verify you have the sample code and branches stored in the Source Repository: The code you just cloned contains a simple Go application that has two entry points: Red and Blue. Each will display a simple colored square on the web page depending on the entry point you go to.
+
+
+Task 3. Create the Cloud Build Triggers
+
+Create the sample-app-prod-deploy trigger
+ 
+1. Go to the Google Cloud Console.
+2. Navigate to the Cloud Build Triggers page.
+3. Click on the Create Trigger button. Fill in the details for the trigger:
+
+Name the trigger: sample-app-prod-deploy
+For event select: Push to a branch
+Choose the source repository sample-app
+Select the branch ^master$
+
+Choose Cloud Build Configuration File as the Build Configuration option and enter the cloudbuild.yaml file location in the repository.
+Save the trigger by clicking the Create button.
+ 
+Create the sample-app-dev-deploy trigger
+1. Repeat the above steps for the dev branch:
+Name the trigger: sample-app-dev-deploy
+For event select: Push to a branch
+Choose the source repository sample-app
+Select the branch ^dev$
+Choose Cloud Build Configuration File as the Build Configuration option and enter the cloudbuild-dev.yaml file location in the repository.
+Save the trigger by clicking the Create button.
+
+After setting up the triggers, any changes to the branches will trigger the corresponding Cloud Build pipeline, which will build and deploy the application as specified in the cloudbuild.yaml files.
+
+Task 4. Deploy the first version of the application
+
+In this section, you will build the first version of the production application and the development application.
+Build the first development deployment
+
+1. In Cloud Shell, inspect the cloudbuild-dev.yaml file to see the steps in the build process. Fill in the <version> on steps 2 and 3 with v1.0.
+2. Navigate to the dev/deployment.yaml file and fill in the <todo> on line 17 with the correct container image name.
+Simply copy the container image (from steps 2 or 3) in the cloudbuild-dev.yaml file and replace the $PROJECT_ID variable with your Project ID. It should look like: <dynamic region>-docker.pkg.dev/qwiklabs-gcp-01-0eb5ce3edc80/my-repository/hello-cloudbuild-dev:v1.0
+3. Make a commit with your changes on the dev branch and push changes to trigger the sample-app-dev-deploy build job.
+ 
+cd ~/sample-app
+git checkout dev
+git add .
+git commit -a -m "update dev cloudbuild and deployment scripts"
+git push -u origin dev
+
+4. Verify your build executed successfully, and verify the development-deployment application was deployed onto the dev namespace of the cluster.
+ 
+5. Expose the development-deployment deployment to a LoadBalancer service named dev-deployment-service on port 8080, and set the target port of the container to the one specified in the Dockerfile.
+
+kubectl expose deployment development-deployment -n dev --name=dev-deployment-service --type=LoadBalancer --port 8080 --target-port 8080
+
+Note: You can check the status in the Workloads section of Kubernetes engine, if the development deployment shows any warning or error while deployment then wait for a few moments and refresh until you see the OK status. And wait and re-run the kubectl command if you get any error as it takes a few minutes to get exposed.
+ 
+6. Navigate to the Load Balancer IP of the service and add the /blue entry point at the end of the URL to verify the application is up and running. It should resemble something like the following: http://34.135.97.199:8080/blue.
+ 
+Build the first production deployment
+
+1. In Cloud Shell, inspect the cloudbuild.yaml file to see the steps in the build process. Fill in the <version> on steps 2 and 3 with v1.0.
+
+2. Navigate to the prod/deployment.yaml file and fill in the <todo> on line 17 with the correct container image name.
+Simply copy the container image (from steps 2 or 3) in the cloudbuild.yaml file and replace the $PROJECT_ID variable with your Project ID. It should look like: <dynamic region>-docker.pkg.dev/<project-id>/my-repository/hello-cloudbuild:v1.0
+ 
+3. Make a commit with your changes on the master branch and push changes to trigger the sample-app-prod-deploy build job.
+ 
+cd ~/sample-app
+git checkout master
+git add .
+git commit -a -m "update cloudbuild and deployment scripts"
+git push -u origin master
+
+4. Verify your build executed successfully, and verify the production-deployment application was deployed onto the prod namespace of the cluster.
+
+5. Expose the production-deployment deployment to a LoadBalancer service named prod-deployment-service on port 8080, and set the target port of the container to the one specified in the Dockerfile.
+ 
+kubectl expose deployment production-deployment -n prod --name=prod-deployment-service --type=LoadBalancer --port 8080 --target-port 8080
+
+Note: You can check the status in the Workloads section of Kubernetes engine, if the production deployment shows any warning or error while deployment then wait for a few moments and refresh until you see the OK status. And wait and re-run the kubectl command if you get any error as it takes a few minutes to get exposed.
+ 
+6. Navigate to the Load Balancer IP of the service and add the /blue entry point at the end of the URL to verify the application is up and running. It should resemble something like the following: http://34.135.245.19:8080/blue.
+ 
+ 
+Task 5. Deploy the second versions of the application
+
+Build the second development deployment
+
+1. Switch back to the dev branch.
+ 
+git checkout dev
+
+2. In the main.go file, update the main() function to the following:
+ 
+func main() {
+http.HandleFunc("/blue", blueHandler)
+http.HandleFunc("/red", redHandler)
+http.ListenAndServe(":8080", nil)
+}
+
+3. Add the following function inside of the main.go file:
+ 
+func redHandler(w http.ResponseWriter, r *http.Request) {
+img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{255, 0, 0, 255}}, image.ZP, draw.Src)
+w.Header().Set("Content-Type", "image/png")
+png.Encode(w, img)
+}
+
+4. Inspect the cloudbuild-dev.yaml file to see the steps in the build process. Update the version of the Docker image to v2.0.
+ 
+5. Navigate to the dev/deployment.yaml file and update the container image name to the new version (v2.0).
+ 
+6. Make a commit with your changes on the dev branch and push changes to trigger the sample-app-dev-deploy build job.
+ 
+git add .
+git commit -m "add red feature to app"
+git push -u origin dev
+
+ 
+7. Verify your build executed successfully, and verify the development-deployment application was deployed onto the dev namespace of the cluster and is using the v2.0 image.
+ 
+8. Navigate to the Load Balancer IP of the service and add the /red entry point at the end of the URL to verify the application is up and running. It should resemble something like the following: http://34.135.245.19:8080/red.
+ 
+Build the second production deployment
+ 
+1. Switch back to the prod branch.
+ 
+git checkout master 
+ 
+2. In the main.go file, update the main() function to the following
+
+func main() {
+http.HandleFunc("/blue", blueHandler)
+http.HandleFunc("/red", redHandler)
+http.ListenAndServe(":8080", nil)
+}
+ 
+3. Add the following function inside of the main.go file:
+ 
+func redHandler(w http.ResponseWriter, r *http.Request) {
+img := image.NewRGBA(image.Rect(0, 0, 100, 100))
+draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{255, 0, 0, 255}}, image.ZP, draw.Src)
+w.Header().Set("Content-Type", "image/png")
+png.Encode(w, img)
+}
+
+4. Inspect the cloudbuild.yaml file to see the steps in the build process. Update the version of the Docker image to v2.0.
+5. Navigate to the prod/deployment.yaml file and update the container image name to the new version (v2.0).
+6. Make a commit with your changes on the master branch and push changes to trigger the sample-app-prod-deploy build job.
+ 
+git add .
+git commit -a -m "add red feature to app"
+git push -u origin master
+
+7. Verify your build executed successfully, and verify the production-deployment application was deployed onto the prod namespace of the cluster and is using the v2.0 image.
+ 
+8. Navigate to the Load Balancer IP of the service and add the /red entry point at the end of the URL to verify the application is up and running. It should resemble something like the following: http://34.135.245.19:8080/red.
+ 
+Task 6. Roll back the production deployment
+ 
+1. Roll back the production-deployment to use the v1.0 version of the application.
+In the Cloud console, go to Cloud Build > Dashboard.
+Click on View all link under Build History for the sample-app-prod-deploy trigger.
+Click on the second most recent build available (or the v1.0 build that executed successfully)
+Click Rebuild.
+
+
+Other method to roll back using kubectl tool(Prefered):
+ 
+Run the following command to roll back the production deployment
+
+kubectl -n prod rollout undo deployment/production-deployment
+
+Run the following command to check version status
+
+kubectl -n prod get pods -o jsonpath --template='{range .items[*]}{.metadata.name}{"\t"}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
+
+ 
+I request you please use the command method for the task 6. You will surely be able to complete the lab without any issue.
+ 

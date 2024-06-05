@@ -1,0 +1,20 @@
+# Google Professional Cloud DevOps Engineer Certification Lab
+
+A DevOps Engineer is responsible for defining and implementing best practices for efficient and reliable software delivery and infrastructure management.
+
+## Setup Instructions
+
+Project ID: Replace <YOUR_PROJECT_ID> with your Google Cloud project ID.
+Zone: Replace <YOUR_ZONE> with the appropriate zone information for your resources.
+Cluster Name: Replace <CLUSTER_NAME> with your desired cluster name.
+**Replace <YOUR_INFOARMATION> with the appropriate information for your resources.
+
+## Setup Instructions
+
+Copy Shell Script File: Download the shell script using curl: curl -LO <My_BASH_SCRIPT_URL>.sh Example : curl -LO raw.githubusercontent.com/quiccklabs/Labs_solutions/master/Managing%20a%20GKE%20Multi-tenant%20Cluster%20with%20Namespaces/qwklb.sh
+
+Apply File Permissions sudo chmod +x filename.sh Example : sudo chmod +x qwklb.sh
+
+Modify Your Resource Information
+
+Run the script ./filename.sh Example : ./qwklb.sh
